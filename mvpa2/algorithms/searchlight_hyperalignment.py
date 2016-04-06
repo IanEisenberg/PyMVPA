@@ -380,11 +380,11 @@ class SearchlightHyperalignment(ClassWithCollections):
             # Find the neighborhood for that selected nearest node
             roi_feature_ids_full = [qe[node_id] for qe, node_id in zip(queryengines, node_ids)]
             # handling queryengines that return AttrDatasets
-            for isub in range(len(roi_feature_ids_all)):
-                if is_datasetlike(roi_feature_ids_all[isub]):
+            for isub in range(len(roi_feature_ids_full)):
+                if is_datasetlike(roi_feature_ids_full[isub]):
                     # making sure queryengine returned proper shaped output
-                    assert(roi_feature_ids_all[isub].nsamples == 1)
-                    roi_feature_ids_all[isub] = roi_feature_ids_all[isub].samples[0, :].tolist()
+                    assert(roi_feature_ids_full[isub].nsamples == 1)
+                    roi_feature_ids_full[isub] = roi_feature_ids_full[isub].samples[0, :].tolist()
 
             # Possibly remap also the feature ids
             roi_feature_ids_all = [
