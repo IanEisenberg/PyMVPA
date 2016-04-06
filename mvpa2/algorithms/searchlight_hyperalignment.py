@@ -375,22 +375,22 @@ class SearchlightHyperalignment(ClassWithCollections):
         for i, node_id in enumerate(block):
             # retrieve the feature ids of all features in the ROI from the query
             # engine
-
-            node_ids = [m[node_id] for m in full_to_skinny]
             # Find the neighborhood for that selected nearest node
-            roi_feature_ids_full = [qe[node_id] for qe, node_id in zip(queryengines, node_ids)]
+            roi_feature_ids_full = [qe[node_id] for qe in queryengines]
+
             # handling queryengines that return AttrDatasets
             for isub in range(len(roi_feature_ids_full)):
                 if is_datasetlike(roi_feature_ids_full[isub]):
                     # making sure queryengine returned proper shaped output
                     assert(roi_feature_ids_full[isub].nsamples == 1)
                     roi_feature_ids_full[isub] = roi_feature_ids_full[isub].samples[0, :].tolist()
-
             # Possibly remap also the feature ids
-            roi_feature_ids_all = [
-                [m[fid] for fid in fids]
-                for m, fids in zip(full_to_skinny, roi_feature_ids_full)
-            ]
+            if full_to_skinny is not None:
+                roi_feature_ids_all = [
+                    [m[fid] for fid in fids]
+                    for m, fids in zip(full_to_skinny, roi_feature_ids_full)]
+            else:
+                roi_feature_ids_all = roi_feature_ids_full
 
             if len(roi_feature_ids_all) == 1:
                 # just one was provided to be "broadcasted"
@@ -625,20 +625,28 @@ class SearchlightHyperalignment(ClassWithCollections):
                 if params.pass_skinny_datasets:
                     # TODO
                     #  1: using our pre-trained QEs select indices of all relevant to a given block features
-                    raise NotImplementedError()
-                    relevant_ids = []  # sorted just to be on safer side
+                    #raise NotImplementedError()
+                    relevant_ids = [[] for isub in range(self.ndatasets)]
+                    for isub, qe in enumerate(queryengines):
+                        relevant_sub_ids = []
+                        for node_id in block:
+                            node_neighbors = qe[node_id]
+                            if is_datasetlike(node_neighbors):
+                                assert(node_neighbors.nsamples == 1)
+                                node_neighbors = node_neighbors.samples[0,:].tolist()
+                            relevant_sub_ids += node_neighbors
+                        relevant_ids[isub] = sorted(set(relevant_sub_ids))
+                    #import pdb; pdb.set_trace()
                     #  2: subselect the datasets
                     datasets_to_block = [ds[:, ids]
                                          for ds, ids in zip(datasets, relevant_ids)]
-
                     full_to_skinny = [np.ones(ds.nfeatures, dtype=np.int32) * 9999999
                                       for ds in datasets]
-                    for m, ids in zip(full_to_skinny, ids):
+                    for m, ids in zip(full_to_skinny, relevant_ids):
                         m[ids] = np.arange(len(ids))
                 else:
                     datasets_to_block = datasets
                     # TODO - make it indeed optional by special handling in proc_block
-                    # full_to_skinny = None
                     full_to_skinny = [
                         np.arange(ds.nfeatures, dtype=np.int32)
                         for ds in datasets
