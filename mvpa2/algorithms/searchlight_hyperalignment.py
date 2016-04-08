@@ -305,7 +305,7 @@ class SearchlightHyperalignment(ClassWithCollections):
             influence the model or voxel selection.""")
 
     pass_skinny_datasets = Parameter(
-        False,
+        True,
         constraints=EnsureBool(),
         doc="""While parallelizing, pass inside only relevant portion of the
             dataset and query engines to be retrained.""")
