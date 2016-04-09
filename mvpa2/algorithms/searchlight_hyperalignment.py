@@ -364,7 +364,6 @@ class SearchlightHyperalignment(ClassWithCollections):
             mvpa2.seed(seed)
         if __debug__:
             debug('SLC', 'Starting computing block for %i elements' % len(block))
-
         # we always handle as if we were passed skinny datasets
         bar = ProgressBar()
         projections = [csc_matrix((self.nfeatures, self.nfeatures),
@@ -620,9 +619,8 @@ class SearchlightHyperalignment(ClassWithCollections):
 
             for iblock, block in enumerate(node_blocks):
                 if params.pass_skinny_datasets:
-                    # TODO
+                    """
                     #  1: using our pre-trained QEs select indices of all relevant to a given block features
-                    #raise NotImplementedError()
                     relevant_ids = [[] for isub in range(self.ndatasets)]
                     for isub, qe in enumerate(queryengines):
                         relevant_sub_ids = []
@@ -633,7 +631,6 @@ class SearchlightHyperalignment(ClassWithCollections):
                                 node_neighbors = node_neighbors.samples[0,:].tolist()
                             relevant_sub_ids += node_neighbors
                         relevant_ids[isub] = sorted(set(relevant_sub_ids))
-                    #import pdb; pdb.set_trace()
                     #  2: subselect the datasets
                     datasets_to_block = [ds[:, ids]
                                          for ds, ids in zip(datasets, relevant_ids)]
@@ -641,13 +638,13 @@ class SearchlightHyperalignment(ClassWithCollections):
                                       for ds in datasets]
                     for m, ids in zip(full_to_skinny, relevant_ids):
                         m[ids] = np.arange(len(ids))
+                    """
+                    datasets_to_block, full_to_skinny = self._make_skinny_ds(datasets, queryengines, block)
                 else:
                     datasets_to_block = datasets
                     # TODO - make it indeed optional by special handling in proc_block
-                    full_to_skinny = [
-                        np.arange(ds.nfeatures, dtype=np.int32)
-                        for ds in datasets
-                    ]
+                    full_to_skinny = [np.arange(ds.nfeatures, dtype=np.int32)
+                                        for ds in datasets]
                 # should we maybe deepcopy the measure to have a unique and
                 # independent one per process?
                 compute(block, datasets_to_block, copy.copy(hmeasure), queryengines,
@@ -659,8 +656,15 @@ class SearchlightHyperalignment(ClassWithCollections):
                 params.nblocks = 1
             params.nblocks = min(len(roi_ids), params.nblocks)
             node_blocks = np.array_split(roi_ids, params.nblocks)
-            p_results = [self._proc_block(block, datasets, hmeasure, queryengines)
-                         for block in node_blocks]
+            if params.pass_skinny_datasets and params.nblocks > 1:
+                p_results = []
+                for block in node_blocks:
+                    datasets_to_block, full_to_skinny = self._make_skinny_ds(datasets, queryengines, block)
+                    p_results.append(self._proc_block(block, datasets_to_block, hmeasure, queryengines,
+                                                      full_to_skinny=full_to_skinny))
+            else:
+                p_results = [self._proc_block(block, datasets, hmeasure, queryengines)
+                             for block in node_blocks]
         results_ds = self.__handle_all_results(p_results)
         # Dummy iterator for, you know, iteration
         list(results_ds)
@@ -711,3 +715,28 @@ class SearchlightHyperalignment(ClassWithCollections):
             queryengine.train(datasets[ref_ds])
             queryengines = [queryengine]
         return queryengines
+
+    def _make_skinny_ds(self, datasets, queryengines, block):
+        #  1: using our pre-trained QEs select indices of all relevant to a given block features
+        #relevant_ids = [[] for isub in range(self.ndatasets)]
+        relevant_ids = []
+        for isub, qe in enumerate(queryengines):
+            relevant_sub_ids = []
+            for node_id in block:
+                node_neighbors = qe[node_id]
+                if is_datasetlike(node_neighbors):
+                    assert (node_neighbors.nsamples == 1)
+                    node_neighbors = node_neighbors.samples[0, :].tolist()
+                relevant_sub_ids += node_neighbors
+            #relevant_ids[isub] = sorted(set(relevant_sub_ids))
+            relevant_ids.append(sorted(set(relevant_sub_ids)))
+        # 2: subselect the datasets
+        if len(relevant_ids) == 1:
+            relevant_ids *= len(datasets)
+        datasets_to_block = [ds[:, ids]
+                             for ds, ids in zip(datasets, relevant_ids)]
+        full_to_skinny = [np.ones(ds.nfeatures, dtype=np.int32) * 9999999
+                          for ds in datasets]
+        for m, ids in zip(full_to_skinny, relevant_ids):
+            m[ids] = np.arange(len(ids))
+        return datasets_to_block, full_to_skinny
