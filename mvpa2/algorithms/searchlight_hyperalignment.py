@@ -388,13 +388,15 @@ class SearchlightHyperalignment(ClassWithCollections):
                     for m, fids in zip(full_to_skinny, roi_feature_ids_full)]
             else:
                 roi_feature_ids_all = roi_feature_ids_full
-
             if len(roi_feature_ids_all) == 1:
                 # just one was provided to be "broadcasted"
                 roi_feature_ids_all *= len(datasets)
+            if len(roi_feature_ids_full) == 1:
+                # just one was provided to be "broadcasted"
+                roi_feature_ids_full *= len(datasets)
 
             # if qe returns zero-sized ROI for any subject, pass...
-            if any(len(x)==0 for x in roi_feature_ids_all):
+            if any(len(x) == 0 for x in roi_feature_ids_all):
                 continue
             # selecting neighborhood for all subject for hyperalignment
             ds_temp = [sd[:, ids] for sd, ids in zip(datasets, roi_feature_ids_all)]
@@ -409,7 +411,6 @@ class SearchlightHyperalignment(ClassWithCollections):
             for isub, roi_feature_ids in enumerate(roi_feature_ids_full):
                 if not self.params.combine_neighbormappers:
                     I = roi_feature_ids
-                    #J = [roi_feature_ids[node_id]] * len(roi_feature_ids)
                     J = [node_id] * len(roi_feature_ids)
                     V = hmappers[isub].tolist()
                     if np.isscalar(V):
@@ -641,10 +642,7 @@ class SearchlightHyperalignment(ClassWithCollections):
                     """
                     datasets_to_block, full_to_skinny = self._make_skinny_ds(datasets, queryengines, block)
                 else:
-                    datasets_to_block = datasets
-                    # TODO - make it indeed optional by special handling in proc_block
-                    full_to_skinny = [np.arange(ds.nfeatures, dtype=np.int32)
-                                        for ds in datasets]
+                    datasets_to_block, full_to_skinny = datasets, None
                 # should we maybe deepcopy the measure to have a unique and
                 # independent one per process?
                 compute(block, datasets_to_block, copy.copy(hmeasure), queryengines,
@@ -652,8 +650,7 @@ class SearchlightHyperalignment(ClassWithCollections):
         else:
             # otherwise collect the results in an 1-item list
             _shpaldebug('Using 1 process to compute mappers.')
-            if params.nblocks is None:
-                params.nblocks = 1
+            params.nblocks = (params.nblocks, 1)[params.nblocks is None]
             params.nblocks = min(len(roi_ids), params.nblocks)
             node_blocks = np.array_split(roi_ids, params.nblocks)
             if params.pass_skinny_datasets and params.nblocks > 1:
