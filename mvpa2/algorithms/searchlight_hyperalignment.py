@@ -199,6 +199,53 @@ class FeatureSelectionHyperalignment(ClassWithCollections):
         return mappers
 
 
+def make_skinny_ds(datasets, queryengines, block):
+    '''
+    Makes datasets skinnier by keeping only features that are part of neighborhoods
+    of features in the block as defined by queryengines
+
+    Parameters
+    ----------
+    datasets : A list of datasets to be stripped down
+
+    queryengines : A list of queryengines to be used to determine neighborhood.
+                If this is a singleton list, then the same queryengine is applied
+                to all datasets.
+
+    block : A list of feature ids or keys that determing the neighborhoods when passed
+            through queryengines.
+
+    Returns
+    -------
+    datasets_to_block : Skinny dataset with only those features that are relevant
+                for neighborhoods
+
+    full_to_skinny : A mapping of feature indices from input dataset to skinny datasets.
+
+    '''
+    #  1: using our pre-trained QEs select indices of all relevant to a given block features
+    relevant_ids = []
+    for isub, qe in enumerate(queryengines):
+        relevant_sub_ids = []
+        for node_id in block:
+            node_neighbors = qe[node_id]
+            if is_datasetlike(node_neighbors):
+                assert (node_neighbors.nsamples == 1)
+                node_neighbors = node_neighbors.samples[0, :].tolist()
+            relevant_sub_ids += node_neighbors
+        relevant_ids.append(sorted(set(relevant_sub_ids)))
+    # 2: subselect the datasets
+    if len(relevant_ids) == 1:
+        relevant_ids *= len(datasets)
+    datasets_to_block = [ds[:, ids]
+                         for ds, ids in zip(datasets, relevant_ids)]
+    full_to_skinny = [np.ones(ds.nfeatures, dtype=np.int32) * 9999999
+                      for ds in datasets]
+    for m, ids in zip(full_to_skinny, relevant_ids):
+        m[ids] = np.arange(len(ids))
+    return datasets_to_block, full_to_skinny
+
+
 class SearchlightHyperalignment(ClassWithCollections):
     """
     Given a list of datasets, provide a list of mappers
@@ -620,27 +667,7 @@ class SearchlightHyperalignment(ClassWithCollections):
 
             for iblock, block in enumerate(node_blocks):
                 if params.pass_skinny_datasets:
-                    """
-                    #  1: using our pre-trained QEs select indices of all relevant to a given block features
-                    relevant_ids = [[] for isub in range(self.ndatasets)]
-                    for isub, qe in enumerate(queryengines):
-                        relevant_sub_ids = []
-                        for node_id in block:
-                            node_neighbors = qe[node_id]
-                            if is_datasetlike(node_neighbors):
-                                assert(node_neighbors.nsamples == 1)
-                                node_neighbors = node_neighbors.samples[0,:].tolist()
-                            relevant_sub_ids += node_neighbors
-                        relevant_ids[isub] = sorted(set(relevant_sub_ids))
-                    #  2: subselect the datasets
-                    datasets_to_block = [ds[:, ids]
-                                         for ds, ids in zip(datasets, relevant_ids)]
-                    full_to_skinny = [np.ones(ds.nfeatures, dtype=np.int32) * 9999999
-                                      for ds in datasets]
-                    for m, ids in zip(full_to_skinny, relevant_ids):
-                        m[ids] = np.arange(len(ids))
-                    """
-                    datasets_to_block, full_to_skinny = self._make_skinny_ds(datasets, queryengines, block)
+                    datasets_to_block, full_to_skinny = make_skinny_ds(datasets, queryengines, block)
                 else:
                     datasets_to_block, full_to_skinny = datasets, None
                 # should we maybe deepcopy the measure to have a unique and
@@ -656,7 +683,7 @@ class SearchlightHyperalignment(ClassWithCollections):
             if params.pass_skinny_datasets and params.nblocks > 1:
                 p_results = []
                 for block in node_blocks:
-                    datasets_to_block, full_to_skinny = self._make_skinny_ds(datasets, queryengines, block)
+                    datasets_to_block, full_to_skinny = make_skinny_ds(datasets, queryengines, block)
                     p_results.append(self._proc_block(block, datasets_to_block, hmeasure, queryengines,
                                                       full_to_skinny=full_to_skinny))
             else:
@@ -712,28 +739,3 @@ class SearchlightHyperalignment(ClassWithCollections):
             queryengine.train(datasets[ref_ds])
             queryengines = [queryengine]
         return queryengines
-
-    def _make_skinny_ds(self, datasets, queryengines, block):
-        #  1: using our pre-trained QEs select indices of all relevant to a given block features
-        #relevant_ids = [[] for isub in range(self.ndatasets)]
-        relevant_ids = []
-        for isub, qe in enumerate(queryengines):
-            relevant_sub_ids = []
-            for node_id in block:
-                node_neighbors = qe[node_id]
-                if is_datasetlike(node_neighbors):
-                    assert (node_neighbors.nsamples == 1)
-                    node_neighbors = node_neighbors.samples[0, :].tolist()
-                relevant_sub_ids += node_neighbors
-            #relevant_ids[isub] = sorted(set(relevant_sub_ids))
-            relevant_ids.append(sorted(set(relevant_sub_ids)))
-        # 2: subselect the datasets
-        if len(relevant_ids) == 1:
-            relevant_ids *= len(datasets)
-        datasets_to_block = [ds[:, ids]
-                             for ds, ids in zip(datasets, relevant_ids)]
-        full_to_skinny = [np.ones(ds.nfeatures, dtype=np.int32) * 9999999
-                          for ds in datasets]
-        for m, ids in zip(full_to_skinny, relevant_ids):
-            m[ids] = np.arange(len(ids))
-        return datasets_to_block, full_to_skinny
