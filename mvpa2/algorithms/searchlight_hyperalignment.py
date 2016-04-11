@@ -26,6 +26,7 @@ from mvpa2.base import externals, warning
 from mvpa2.support import copy
 from mvpa2.featsel.helpers import FixedNElementTailSelector
 from mvpa2.base.types import is_datasetlike
+from mvpa2.misc.surfing.queryengine import SurfaceVerticesQueryEngine
 
 if externals.exists('h5py'):
     from mvpa2.base.hdf5 import h5save, h5load
@@ -554,8 +555,7 @@ class SearchlightHyperalignment(ClassWithCollections):
         queryengines = self._get_trained_queryengines(
             datasets, params.queryengine, params.radius, params.ref_ds)
         # For surface nodes to voxels queryengines, roi_seed hardly makes sense
-        if isinstance(queryengines[params.ref_ds],
-                      mvpa2.misc.surfing.queryengine.SurfaceVerticesQueryEngine):
+        if isinstance(queryengines[params.ref_ds], SurfaceVerticesQueryEngine):
             self.force_roi_seed = False
             if not self.params.combine_neighbormappers:
                 raise NotImplementedError("Mapping from voxels to surface nodes is not "
