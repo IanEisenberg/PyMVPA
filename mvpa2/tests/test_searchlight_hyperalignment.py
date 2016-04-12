@@ -355,7 +355,7 @@ class SearchlightHyperalignmentTests(unittest.TestCase):
         projs = apply_slhyper(qe0)
         # Test that in general we get larger coefficients for "correct" transformation
         for p, tproj in zip(projs, tprojs_shifted):
-            assert(np.all(np.asarray(p)[tproj>0] >= 1.0))  # .astype(int), tproj)
+            assert(np.all(np.asarray(p)[tproj>0] >= 1.0))
             assert_array_lequal(np.mean(np.asarray(p)[tproj == 0]), 0.3)
 
         qe1 = FancyQE([[0, 1, 2, 3], [1, 2, 3], [2, 3], [3]])
