@@ -693,15 +693,8 @@ class SearchlightHyperalignment(ClassWithCollections):
             params.nblocks = (params.nblocks, 1)[params.nblocks is None]
             params.nblocks = min(len(roi_ids), params.nblocks)
             node_blocks = np.array_split(roi_ids, params.nblocks)
-            if params.pass_skinny_datasets and params.nblocks > 1:
-                p_results = []
-                for block in node_blocks:
-                    datasets_to_block, full_to_skinny = make_skinny_ds(datasets, queryengines, block)
-                    p_results.append(self._proc_block(block, datasets_to_block, hmeasure, queryengines,
-                                                      full_to_skinny=full_to_skinny))
-            else:
-                p_results = [self._proc_block(block, datasets, hmeasure, queryengines)
-                             for block in node_blocks]
+            p_results = [self._proc_block(block, datasets, hmeasure, queryengines)
+                         for block in node_blocks]
         results_ds = self.__handle_all_results(p_results)
         # Dummy iterator for, you know, iteration
         list(results_ds)
