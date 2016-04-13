@@ -203,14 +203,14 @@ class FeatureSelectionHyperalignment(ClassWithCollections):
         return mappers
 
 
-def make_skinny_ds(datasets, queryengines, block):
+def make_sliced_ds(datasets, queryengines, block):
     '''
-    Makes datasets skinnier by keeping only features that are part of neighborhoods
+    Makes sliced datasets by keeping minimal feature range that is part of neighborhoods
     of features in the block as defined by queryengines
 
     Parameters
     ----------
-    datasets : A list of datasets to be stripped down
+    datasets : A list of datasets to be sliced
 
     queryengines : A list of queryengines to be used to determine neighborhood.
                 If this is a singleton list, then the same queryengine is applied
@@ -221,34 +221,35 @@ def make_skinny_ds(datasets, queryengines, block):
 
     Returns
     -------
-    datasets_to_block : Skinny dataset with only those features that are relevant
+    datasets_sliced : Sliced dataset with feature range that is relevant
                 for neighborhoods
 
     full_to_skinny : A mapping of feature indices from input dataset to skinny datasets.
 
     '''
-    #  1: using our pre-trained QEs select indices of all relevant to a given block features
-    relevant_ids = []
+    #  Selecting relevant range using qes to a given block of features
+    relevant_ranges = []
     for isub, qe in enumerate(queryengines):
-        relevant_sub_ids = []
+        fmax, fmin = 0, datasets[isub].nfeatures
         for node_id in block:
             node_neighbors = qe[node_id]
             if is_datasetlike(node_neighbors):
                 assert (node_neighbors.nsamples == 1)
                 node_neighbors = node_neighbors.samples[0, :].tolist()
-            relevant_sub_ids += node_neighbors
-        relevant_ids.append(sorted(set(relevant_sub_ids)))
-    # 2: subselect the datasets
-    if len(relevant_ids) == 1:
-        relevant_ids *= len(datasets)
-    datasets_to_block = [ds[:, ids]
-                         for ds, ids in zip(datasets, relevant_ids)]
-    full_to_skinny = [np.ones(ds.nfeatures, dtype=np.int32) * 9999999
-                      for ds in datasets]
-    for m, ids in zip(full_to_skinny, relevant_ids):
-        m[ids] = np.arange(len(ids))
-    return datasets_to_block, full_to_skinny
-
+            fmin = min(fmin, min(node_neighbors))
+            fmax = max(fmax, max(node_neighbors))
+        assert(fmin <= fmax)
+        relevant_ranges.append((fmin, fmax))
+    # Slice the datasets
+    if len(relevant_ranges) == 1:
+        relevant_ranges *= len(datasets)
+    isfull = [rr[0] == 0 and rr[1] == ds.nfeatures - 1 for rr, ds in
+                  zip(relevant_ranges, datasets)]
+    if np.all(isfull):
+        return datasets, None
+    datasets_sliced = [ds[:, rr[0]:rr[1] + 1] for ds, rr in zip(datasets, relevant_ranges)]
+    slice_mins = [rr[0] for rr in relevant_ranges]
+    return datasets_sliced, slice_mins
 
 class SearchlightHyperalignment(ClassWithCollections):
     """
@@ -355,11 +356,11 @@ class SearchlightHyperalignment(ClassWithCollections):
             common model.  These will still get mappers back but they don't
             influence the model or voxel selection.""")
 
-    pass_skinny_datasets = Parameter(
+    # TODO Also allow slicing from outside this class
+    use_dataset_slicing = Parameter(
         True,
         constraints=EnsureBool(),
-        doc="""While parallelizing, pass inside only relevant portion of the
-            dataset and query engines to be retrained.""")
+        doc="""While parallelizing, pass only relevant sliced dataset to be compute block.""")
 
     mask_node_ids = Parameter(
         None,
@@ -404,8 +405,6 @@ class SearchlightHyperalignment(ClassWithCollections):
         if self.params.results_backend == 'native':
             raise NotImplementedError("'native' mode to handle results is still a "
                                       "work in progress.")
-            #warning("results_backend is set to 'native'. This has been known"
-            #        "to result in longer run time when working with big datasets.")
         if self.params.results_backend == 'hdf5' and \
                 not externals.exists('h5py'):
             raise RuntimeError("The 'hdf5' module is required for "
@@ -436,11 +435,12 @@ class SearchlightHyperalignment(ClassWithCollections):
                     roi_feature_ids_full[isub] = roi_feature_ids_full[isub].samples[0, :].tolist()
             # Possibly remap also the feature ids
             if full_to_skinny is not None:
-                roi_feature_ids_all = [
-                    [m[fid] for fid in fids]
-                    for m, fids in zip(full_to_skinny, roi_feature_ids_full)]
+                roi_feature_ids_all = [[fid - slice_min for fid in fids] if slice_min else fids
+                                    for slice_min, fids in zip(full_to_skinny, roi_feature_ids_full)]
+                assert (np.all([min(fids) >= 0 for fids in roi_feature_ids_all]))
             else:
                 roi_feature_ids_all = roi_feature_ids_full
+
             if len(roi_feature_ids_all) == 1:
                 # just one was provided to be "broadcasted"
                 roi_feature_ids_all *= len(datasets)
@@ -679,8 +679,8 @@ class SearchlightHyperalignment(ClassWithCollections):
             seed = mvpa2.get_random_seed()
 
             for iblock, block in enumerate(node_blocks):
-                if params.pass_skinny_datasets:
-                    datasets_to_block, full_to_skinny = make_skinny_ds(datasets, queryengines, block)
+                if params.use_dataset_slicing:
+                    datasets_to_block, full_to_skinny = make_sliced_ds(datasets, queryengines, block)
                 else:
                     datasets_to_block, full_to_skinny = datasets, None
                 # should we maybe deepcopy the measure to have a unique and
