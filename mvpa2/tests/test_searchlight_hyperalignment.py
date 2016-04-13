@@ -222,7 +222,7 @@ class SearchlightHyperalignmentTests(unittest.TestCase):
                        {'combine_neighbormappers': False},
                        {'combine_neighbormappers': False, 'mask_node_ids': np.arange(dss[0].nfeatures).tolist()},
                        {'combine_neighbormappers': True, 'sparse_radius': 1},
-                       {'combine_neighbormappers': True, 'nblocks': 2}]:
+                       {'combine_neighbormappers': True, 'nblocks': 2, 'use_dataset_slicing': False}]:
             slhyp = SearchlightHyperalignment(radius=2, **kwargs)
             mappers = slhyp(dss)
             # one mapper per input ds
@@ -236,6 +236,8 @@ class SearchlightHyperalignmentTests(unittest.TestCase):
             # recon check
             assert_array_almost_equal(projs[0][midx].proj.todense(),
                                       projs[1][midx].recon.T.todense(), decimal=5)
+            assert_array_almost_equal(projs[0][midx].proj.todense(),
+                                      projs[6][midx].recon.T.todense(), decimal=5)
             assert_equal(projs[1][midx].proj.dtype, 'float64')
             assert_equal(projs[0][midx].proj.dtype, 'float32')
         # making sure the projections make sense
