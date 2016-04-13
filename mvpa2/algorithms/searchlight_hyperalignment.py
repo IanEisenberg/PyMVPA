@@ -610,13 +610,7 @@ class SearchlightHyperalignment(ClassWithCollections):
                         "number of cores. Using 1"
                         % externals.versions['pprocess'])
                 params.nproc = 1
-
-        # XXX I think this class should already accept a single dataset only.
-        # It should have a ``space`` setting that names a sample attribute that
-        # can be used to identify individual/original datasets.
-        # Taking a single dataset as argument would be cleaner, because the
-        # algorithm relies on the assumption that there is a coarse feature
-        # alignment, i.e. the SL ROIs cover roughly the same area
+        # Setting up queryengines and searchlight centers
         queryengines = self._get_trained_queryengines(
             datasets, params.queryengine, params.radius, params.ref_ds)
         # For surface nodes to voxels queryengines, roi_seed hardly makes sense
