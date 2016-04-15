@@ -203,7 +203,7 @@ class FeatureSelectionHyperalignment(ClassWithCollections):
         return mappers
 
 
-def make_sliced_ds(datasets, queryengines, block):
+def make_sliced_dss(datasets, queryengines, block):
     '''
     Makes sliced datasets by keeping minimal feature range that is part of neighborhoods
     of features in the block as defined by queryengines
@@ -674,7 +674,7 @@ class SearchlightHyperalignment(ClassWithCollections):
 
             for iblock, block in enumerate(node_blocks):
                 if params.use_dataset_slicing:
-                    datasets_to_block, full_to_skinny = make_sliced_ds(datasets, queryengines, block)
+                    datasets_to_block, full_to_skinny = make_sliced_dss(datasets, queryengines, block)
                 else:
                     datasets_to_block, full_to_skinny = datasets, None
                 # should we maybe deepcopy the measure to have a unique and
