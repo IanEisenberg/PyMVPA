@@ -11,8 +11,9 @@
 import os
 import numpy as np
 
-from tempfile import mktemp
+from tempfile import mktemp, mkdtemp
 from numpy.linalg import LinAlgError
+import joblib
 
 import mvpa2
 from mvpa2.base.state import ClassWithCollections
@@ -201,6 +202,85 @@ class FeatureSelectionHyperalignment(ClassWithCollections):
         if not self.full_matrix:
             mappers = [np.squeeze(m[:, seed_index]) for m in mappers]
         return mappers
+
+
+def outer_proc_block(block, datasets, featselhyper, queryengines, seed=None, ref_ds=0, dtype='float32',
+                force_roi_seed=False, combine_neighbormappers=True, iblock='main'):
+    if seed is not None:
+        mvpa2.seed(seed)
+    if __debug__:
+        debug('SLC', 'Starting computing block for %i elements' % len(block))
+    bar = ProgressBar()
+    # TODO make sure these are correctly initialized
+    tmp_prefix = 'tmpshpal'
+    nfeatures = datasets[ref_ds].nfeatures
+    ndatasets = len(datasets)
+    projections = [csc_matrix((nfeatures, nfeatures),
+                              dtype=dtype)
+                   for isub in range(ndatasets)]
+    for i, node_id in enumerate(block):
+        # retrieve the feature ids of all features in the ROI from the query
+        # engine
+
+        # Find the neighborhood for that selected nearest node
+        roi_feature_ids_all = [qe[node_id] for qe in queryengines]
+        # handling queryengines that return AttrDatasets
+        for isub in range(len(roi_feature_ids_all)):
+            if is_datasetlike(roi_feature_ids_all[isub]):
+                # making sure queryengine returned proper shaped output
+                assert (roi_feature_ids_all[isub].nsamples == 1)
+                roi_feature_ids_all[isub] = roi_feature_ids_all[isub].samples[0,
+                                            :].tolist()
+        if len(roi_feature_ids_all) == 1:
+            # just one was provided to be "broadcasted"
+            roi_feature_ids_all *= len(datasets)
+        # if qe returns zero-sized ROI for any subject, pass...
+        if any(len(x) == 0 for x in roi_feature_ids_all):
+            continue
+        # selecting neighborhood for all subject for hyperalignment
+        ds_temp = [sd[:, ids] for sd, ids in zip(datasets, roi_feature_ids_all)]
+        if force_roi_seed:
+            roi_seed = np.array(roi_feature_ids_all[ref_ds]) == node_id
+            ds_temp[ref_ds].fa['roi_seed'] = roi_seed
+        if __debug__:
+            msg = 'ROI (%i/%i), %i features' % (i + 1, len(block),
+                                                ds_temp[ref_ds].nfeatures)
+            debug('SLC', bar(float(i + 1) / len(block), msg), cr=True)
+        hmappers = featselhyper(ds_temp)
+        assert (len(hmappers) == len(datasets))
+        roi_feature_ids_ref_ds = roi_feature_ids_all[ref_ds]
+        for isub, roi_feature_ids in enumerate(roi_feature_ids_all):
+            if not combine_neighbormappers:
+                I = roi_feature_ids
+                # J = [roi_feature_ids[node_id]] * len(roi_feature_ids)
+                J = [node_id] * len(roi_feature_ids)
+                V = hmappers[isub].tolist()
+                if np.isscalar(V):
+                    V = [V]
+            else:
+                I, J, V = [], [], []
+                for f2, roi_feature_id_ref_ds in enumerate(roi_feature_ids_ref_ds):
+                    I += roi_feature_ids
+                    J += [roi_feature_id_ref_ds] * len(roi_feature_ids)
+                    V += hmappers[isub][:, f2].tolist()
+            proj = coo_matrix(
+                (V, (I, J)),
+                shape=(max(nfeatures, max(I) + 1), max(nfeatures, max(J) + 1)),
+                dtype=dtype)
+            proj = proj.tocsc()
+            # Cleaning up the current subject's projections to free up memory
+            hmappers[isub] = [[] for _ in hmappers]
+            projections[isub] = projections[isub] + proj
+
+    # store results in a temporary file and return a filename
+    results_file = mktemp(prefix=tmp_prefix,
+                          suffix='-%s.hdf5' % iblock)
+    if __debug__:
+        debug('SLC', "Storing results into %s" % results_file)
+    h5save(results_file, projections)
+    if __debug__:
+        debug('SLC_', "Results stored")
+    return results_file
 
 
 class SearchlightHyperalignment(ClassWithCollections):
@@ -604,6 +684,24 @@ class SearchlightHyperalignment(ClassWithCollections):
             # the next block sets up the infrastructure for parallel computing
             # this can easily be changed into a ParallelPython loop, if we
             # decide to have a PP job server in PyMVPA
+            from joblib import Parallel, delayed, load, dump
+            # Setting up shared datasets samples arrays
+            temp_folder = mkdtemp(suffix='shpaljoblib')
+            for isub, sd in enumerate(datasets):
+                mmap_fname = os.path.join(temp_folder, 'ds%d.mmap' % isub)
+                if os.path.exists(mmap_fname):
+                    os.unlink(mmap_fname)
+                _ = dump(sd.samples, mmap_fname)
+                sd.samples = load(mmap_fname, mmap_mode='r')
+            # setting up paralle procs
+            seed = mvpa2.get_random_seed()
+            # nproc_needed = -1
+            compute = Parallel(n_jobs=nproc_needed, max_nbytes=None)
+            p_results = compute((delayed(outer_proc_block, check_pickle=False)(block, datasets, copy.copy(hmeasure),
+                            queryengines=queryengines, seed=seed, iblock=iblock))
+                            for iblock, block in enumerate(node_blocks))
+            # Old ways
+            '''
             import pprocess
             p_results = pprocess.Map(limit=nproc_needed)
             if __debug__:
@@ -617,6 +715,7 @@ class SearchlightHyperalignment(ClassWithCollections):
                 # independent one per process?
                 compute(block, datasets, copy.copy(hmeasure), queryengines,
                         seed=seed, iblock=iblock)
+            '''
         else:
             # otherwise collect the results in an 1-item list
             _shpaldebug('Using 1 process to compute mappers.')
