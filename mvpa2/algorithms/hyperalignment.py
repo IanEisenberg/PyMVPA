@@ -142,24 +142,24 @@ class Hyperalignment(ClassWithCollections):
     zscore_common = Parameter(True, constraints='bool',
             doc="""Flag to Z-score the common space after each adjustment.
                 This should be left enabled in most cases.""")
+    #
+    # combiner1 = Parameter(lambda x,y: 0.5*(x+y), #
+    #         doc="""How to update common space in the 1st-level loop. This must
+    #             be a callable that takes two arguments. The first argument is
+    #             one of the input datasets after projection onto the 1st-level
+    #             common space. The second argument is the current 1st-level
+    #             common space. The 1st-level combiner is called iteratively for
+    #             each projected input dataset, except for the reference dataset.
+    #             By default the new common space is the average of the current
+    #             common space and the recently projected dataset.""")
 
-    combiner1 = Parameter(lambda x,y: 0.5*(x+y), #
-            doc="""How to update common space in the 1st-level loop. This must
-                be a callable that takes two arguments. The first argument is
-                one of the input datasets after projection onto the 1st-level
-                common space. The second argument is the current 1st-level
-                common space. The 1st-level combiner is called iteratively for
-                each projected input dataset, except for the reference dataset.
-                By default the new common space is the average of the current
-                common space and the recently projected dataset.""")
-
-    combiner2 = Parameter(lambda l: np.mean(l, axis=0),
-            doc="""How to combine all individual spaces to common space. This
-            must be a callable that take a sequence of datasets as an argument.
-            The callable must return a single array. This combiner is called
-            once with all datasets after 1st-level projection to create an
-            updated common space, and is subsequently called again after each
-            2nd-level iteration.""")
+    # combiner2 = Parameter(lambda l: np.mean(l, axis=0),
+    #         doc="""How to combine all individual spaces to common space. This
+    #         must be a callable that take a sequence of datasets as an argument.
+    #         The callable must return a single array. This combiner is called
+    #         once with all datasets after 1st-level projection to create an
+    #         updated common space, and is subsequently called again after each
+    #         2nd-level iteration.""")
 
 
     def __init__(self, **kwargs):
@@ -373,7 +373,8 @@ class Hyperalignment(ClassWithCollections):
             # to make a batch update after processing all 1st-level datasets
             # to an identical 1st-level common space
             # TODO: make just a function so we dont' waste space
-            commonspace = params.combiner1(ds_, commonspace)
+            # commonspace = params.combiner1(ds_, commonspace)
+            commonspace = 0.5 * (ds_ + commonspace)
             if params.zscore_common:
                 zscore(commonspace, chunks_attr=None)
         return data_mapped
@@ -384,7 +385,8 @@ class Hyperalignment(ClassWithCollections):
         data_mapped = lvl1_data
         # aggregate all processed 1st-level datasets into a new 2nd-level
         # common space
-        commonspace = params.combiner2(data_mapped)
+        # commonspace = params.combiner2(data_mapped)
+        commonspace = np.mean(data_mapped, axis=0)
 
         # XXX Why is this commented out? Who knows what combiner2 is doing and
         # whether it changes the distribution of the data
@@ -425,7 +427,8 @@ class Hyperalignment(ClassWithCollections):
                 if residuals is not None:
                     residuals[1+loop, i] = np.linalg.norm(ds_ - commonspace)
 
-            commonspace = params.combiner2(data_mapped)
+            #commonspace = params.combiner2(data_mapped)
+            commonspace = np.mean(data_mapped, axis=0)
 
         # and again
         if params.zscore_common:
