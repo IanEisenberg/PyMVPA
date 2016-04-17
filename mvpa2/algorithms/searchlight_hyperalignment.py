@@ -206,6 +206,9 @@ class FeatureSelectionHyperalignment(ClassWithCollections):
 
 def outer_proc_block(block, datasets, featselhyper, queryengines, seed=None, ref_ds=0, dtype='float32',
                 force_roi_seed=False, combine_neighbormappers=True, iblock='main'):
+    """
+    proc_block pulled outside the class to make joblib work.
+    """
     if seed is not None:
         mvpa2.seed(seed)
     if __debug__:
@@ -700,6 +703,9 @@ class SearchlightHyperalignment(ClassWithCollections):
             p_results = compute((delayed(outer_proc_block, check_pickle=False)(block, datasets, copy.copy(hmeasure),
                             queryengines=queryengines, seed=seed, iblock=iblock))
                             for iblock, block in enumerate(node_blocks))
+            import shutil
+            print temp_folder
+            shutil.rmtree(temp_folder)
             # Old ways
             '''
             import pprocess
