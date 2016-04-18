@@ -151,8 +151,8 @@ class FeatureSelectionHyperalignment(ClassWithCollections):
                 datasets = [sd[:, features_selected] for sd in datasets]
             else:
                 features_selected = []
-                for fs in feature_scores:
-                    if seed_index is not None:
+                for isub, fs in enumerate(feature_scores):
+                    if seed_index is not None and isub == ref_ds:
                         fs[seed_index] = max(fs)
                     features_selected.append(fselector(fs))
                 datasets = [sd[:, fsel] for fsel, sd in zip(features_selected, datasets)]
