@@ -413,6 +413,8 @@ class SearchlightHyperalignment(ClassWithCollections):
         constraints='str',
         doc="""Prefix for temporary files. See Searchlight documentation.""")
 
+    use_joblib = Parameter(False, doc="""Joblib or pprocess""")
+
     def __init__(self, **kwargs):
         _shpaldebug("Initializing.")
         ClassWithCollections.__init__(self, **kwargs)
@@ -687,41 +689,40 @@ class SearchlightHyperalignment(ClassWithCollections):
             # the next block sets up the infrastructure for parallel computing
             # this can easily be changed into a ParallelPython loop, if we
             # decide to have a PP job server in PyMVPA
-            from joblib import Parallel, delayed, load, dump
-            # Setting up shared datasets samples arrays
-            temp_folder = mkdtemp(suffix='shpaljoblib')
-            for isub, sd in enumerate(datasets):
-                mmap_fname = os.path.join(temp_folder, 'ds%d.mmap' % isub)
-                if os.path.exists(mmap_fname):
-                    os.unlink(mmap_fname)
-                _ = dump(sd.samples, mmap_fname)
-                sd.samples = load(mmap_fname, mmap_mode='r')
-            # setting up paralle procs
-            seed = mvpa2.get_random_seed()
-            # nproc_needed = -1
-            compute = Parallel(n_jobs=nproc_needed, max_nbytes=None)
-            p_results = compute((delayed(outer_proc_block, check_pickle=False)(block, datasets, copy.copy(hmeasure),
-                            queryengines=queryengines, seed=seed, iblock=iblock))
-                            for iblock, block in enumerate(node_blocks))
-            import shutil
-            print temp_folder
-            shutil.rmtree(temp_folder)
+            if self.params.use_joblib:
+                from joblib import Parallel, delayed, load, dump
+                # Setting up shared datasets samples arrays
+                temp_folder = mkdtemp(suffix='shpaljoblib')
+                for isub, sd in enumerate(datasets):
+                    mmap_fname = os.path.join(temp_folder, 'ds%d.mmap' % isub)
+                    if os.path.exists(mmap_fname):
+                        os.unlink(mmap_fname)
+                    _ = dump(sd.samples, mmap_fname)
+                    sd.samples = load(mmap_fname, mmap_mode='r')
+                # setting up paralle procs
+                seed = mvpa2.get_random_seed()
+                compute = Parallel(n_jobs=nproc_needed, max_nbytes=None)
+                p_results = compute((delayed(outer_proc_block, check_pickle=False)(block, datasets, copy.copy(hmeasure),
+                                queryengines=queryengines, seed=seed, iblock=iblock))
+                                for iblock, block in enumerate(node_blocks))
+                import shutil
+                print temp_folder
+                shutil.rmtree(temp_folder)
             # Old ways
-            '''
-            import pprocess
-            p_results = pprocess.Map(limit=nproc_needed)
-            if __debug__:
-                debug('SLC', "Starting off %s child processes for nblocks=%i"
-                      % (nproc_needed, params.nblocks))
-            compute = p_results.manage(
-                        pprocess.MakeParallel(self._proc_block))
-            seed = mvpa2.get_random_seed()
-            for iblock, block in enumerate(node_blocks):
-                # should we maybe deepcopy the measure to have a unique and
-                # independent one per process?
-                compute(block, datasets, copy.copy(hmeasure), queryengines,
-                        seed=seed, iblock=iblock)
-            '''
+            else:
+                import pprocess
+                p_results = pprocess.Map(limit=nproc_needed)
+                if __debug__:
+                    debug('SLC', "Starting off %s child processes for nblocks=%i"
+                          % (nproc_needed, params.nblocks))
+                compute = p_results.manage(
+                            pprocess.MakeParallel(self._proc_block))
+                seed = mvpa2.get_random_seed()
+                for iblock, block in enumerate(node_blocks):
+                    # should we maybe deepcopy the measure to have a unique and
+                    # independent one per process?
+                    compute(block, datasets, copy.copy(hmeasure), queryengines,
+                            seed=seed, iblock=iblock)
         else:
             # otherwise collect the results in an 1-item list
             _shpaldebug('Using 1 process to compute mappers.')
