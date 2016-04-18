@@ -362,6 +362,11 @@ class SearchlightHyperalignment(ClassWithCollections):
         constraints=EnsureBool(),
         doc="""While parallelizing, pass only relevant sliced dataset to be compute block.""")
 
+    force_roi_seed = Parameter(
+        True,
+        constraints=EnsureBool(),
+        doc="""To force ignoring ROI seed for certain queryengines.""")
+
     mask_node_ids = Parameter(
         None,
         constraints=EnsureListOf(int) | EnsureNone(),
@@ -391,7 +396,7 @@ class SearchlightHyperalignment(ClassWithCollections):
         self.nfeatures = 0
         self.projections = None
         # This option makes the roi_seed in each SL to be selected during feature selection
-        self.force_roi_seed = True
+        self.force_roi_seed = self.params.force_roi_seed
         if self.params.nproc is not None and self.params.nproc > 1 \
                 and not externals.exists('pprocess'):
             raise RuntimeError("The 'pprocess' module is required for "
