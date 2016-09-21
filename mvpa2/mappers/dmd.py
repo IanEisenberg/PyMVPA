@@ -55,3 +55,16 @@ class DMD(Mapper):
         self.phi = Y.dot(Vh[:r, :].T).dot(W) / S[:r]
         # Solving for z with first sample
         self.z = np.linalg.pinv(self.phi).dot(X[:, 0])
+
+
+    def forward1(self, nsamples):
+        """
+        Forwarding/Reconstructing data using the DMD modes.
+
+        :param data:
+        :return:
+        """
+        # Initialize with zeros?
+        Xhat = np.zeros(shape=(self.z.shape[0], nsamples), dtype=float)
+        for tr in range(nsamples):
+            Xhat = self.z.dot()
