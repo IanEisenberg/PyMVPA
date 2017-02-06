@@ -699,9 +699,10 @@ class SearchlightHyperalignment(ClassWithCollections):
                         os.unlink(mmap_fname)
                     _ = dump(sd.samples, mmap_fname)
                     sd.samples = load(mmap_fname, mmap_mode='r')
-                # setting up paralle procs
+                # setting up parallel procs
                 seed = mvpa2.get_random_seed()
-                compute = Parallel(n_jobs=nproc_needed, max_nbytes=None)
+                compute = Parallel(n_jobs=nproc_needed, pre_dispatch=nproc_needed,
+                                   max_nbytes=None)
                 p_results = compute((delayed(outer_proc_block, check_pickle=False)(block, datasets, copy.copy(hmeasure),
                                 queryengines=queryengines, seed=seed, iblock=iblock))
                                 for iblock, block in enumerate(node_blocks))
